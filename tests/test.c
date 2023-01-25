@@ -8,7 +8,5 @@ int main() {
   } else {
     printf("WTF?!\n");
   }
-  const char *test = "nihao";
-  printf("%s", test);
   return 0;
 }

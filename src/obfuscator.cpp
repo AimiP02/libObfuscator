@@ -8,6 +8,8 @@
 #include <llvm/IR/GlobalValue.h>
 #include <llvm/IR/Instruction.h>
 #include <llvm/Support/Casting.h>
+
+#include <cstdio>
 #include <map>
 #include <utility>
 #include <vector>
@@ -41,18 +43,21 @@ public:
   StrObfuscator() {}
   ~StrObfuscator() {}
 
-  void ObfuscateString(Module &M, Instruction *Inst, User *Usr,
+  void ObfuscateString(Module &M, Instruction *Inst, Value *Usr,
                        GlobalVariable *GVar) {
     ConstantDataArray *GVarArr =
         dyn_cast<ConstantDataArray>(GVar->getInitializer());
-    if (GVarArr == nullptr)
+    if (GVarArr == nullptr) {
       return;
+    }
     std::string Origin_Str;
+    // 判断字符串末尾是否包含"/x00"，需要去掉字符串末尾的"/x00"
     if (GVarArr->isString()) {
       Origin_Str = GVarArr->getAsString().str();
-    } else {
+    } else if (GVarArr->isCString()) {
       Origin_Str = GVarArr->getAsCString().str();
     }
+    outs() << "Origin string: " << Origin_Str << "\n";
     Encrypt(Origin_Str);
     Constant *NewConstStr = ConstantDataArray::getString(
         GVarArr->getContext(), StringRef(Origin_Str), false);
@@ -61,14 +66,20 @@ public:
     IRBuilder<> builder(Inst);
     Type *Int8PtrTy = builder.getInt8PtrTy();
     SmallVector<Type *, 1> FuncArgs = {Int8PtrTy};
-    FunctionType *FuncType = FunctionType::get(Int8PtrTy, FuncArgs, false);
-    Value *DecryptFunc = M.getOrInsertFunction("__decrypt", FuncType).getCallee();
-
     SmallVector<Value *, 1> CallArgs = {Usr};
+    FunctionType *FuncType = FunctionType::get(Int8PtrTy, FuncArgs, false);
+
+    Value *DecryptFunc =
+        M.getOrInsertFunction("__decrypt", FuncType).getCallee();
     CallInst *DecryptInst = builder.CreateCall(FuncType, DecryptFunc, CallArgs);
-    Value *EncryptFunc = M.getOrInsertFunction("__encrypt", FuncType).getCallee();
-    CallInst *EncryptInst = builder.CreateCall(FuncType, EncryptFunc, CallArgs);
+
+    Value *EncryptFunc =
+        M.getOrInsertFunction("__encrypt", FuncType).getCallee();
+    CallInst *EncryptInst = CallInst::Create(FuncType, EncryptFunc, CallArgs);
+
+    // DecryptInst->insertBefore(Inst);
     EncryptInst->insertAfter(Inst);
+    outs() << "IR:" << *Inst << " has been modified\n";
   }
 
   virtual PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
@@ -82,15 +93,18 @@ public:
       std::vector<std::pair<Instruction *, User *>> Target;
       bool hasExceptCallInst = false;
       // 获取使用GVar的User
-      for (auto *Usr : GVar->users()) {
+      for (User *Usr : GVar->users()) {
         outs() << "User: " << *Usr << "\n";
         Instruction *Inst = dyn_cast<Instruction>(Usr);
         // 如果引用是NULL，说明这条指令并不是单独的指令，被嵌套在了其他指令中
         if (Inst == nullptr) {
-          for (auto *DirectUsr : Usr->users()) {
+          for (User *DirectUsr : Usr->users()) {
             Inst = dyn_cast<Instruction>(DirectUsr);
             outs() << "DirectUsr Instruction: " << *Inst << "\n";
             // 如果不是一个Call指令，那么是不需要修改的，我们只修改函数形参引用的字符串
+            if (Inst == nullptr) {
+              continue;
+            }
             if (!isa<CallInst>(Inst)) {
               hasExceptCallInst = true;
               Target.clear();
@@ -103,6 +117,8 @@ public:
       // 对每个字符串进行加密
       if (hasExceptCallInst == false && Target.size() == 1) {
         for (auto &T : Target) {
+          outs() << "Parameter Instruction: " << *T.first << "\n";
+          outs() << "Parameter User: " << *T.second << "\n";
           ObfuscateString(M, T.first, T.second, GVar);
         }
         GVar->setConstant(false);
@@ -110,6 +126,8 @@ public:
 
       outs() << "\n";
     }
+
+    outs() << "Finished\n";
 
     return PreservedAnalyses::all();
   }

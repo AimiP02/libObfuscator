@@ -6,8 +6,6 @@ target triple = "x86_64-unknown-linux-gnu"
 @.str = private unnamed_addr constant [26 x i8] c"This is a testing string!\00", align 1
 @.str.1 = private unnamed_addr constant [8 x i8] c"6666%c\0A\00", align 1
 @.str.2 = private unnamed_addr constant [7 x i8] c"WTF?!\0A\00", align 1
-@.str.3 = private unnamed_addr constant [6 x i8] c"nihao\00", align 1
-@.str.4 = private unnamed_addr constant [3 x i8] c"%s\00", align 1
 
 ; Function Attrs: noinline nounwind uwtable
 define dso_local i32 @main() #0 {
@@ -28,7 +26,6 @@ define dso_local i32 @main() #0 {
   br label %11
 
 11:                                               ; preds = %9, %6
-  %12 = call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str.4, i64 0, i64 0), i8* getelementptr inbounds ([6 x i8], [6 x i8]* @.str.3, i64 0, i64 0))
   ret i32 0
 }
 

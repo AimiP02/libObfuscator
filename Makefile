@@ -1,34 +1,42 @@
 OPTIMIZER := obfuscator.so
 
-CXXFLAGS := $(shell llvm-config --cxxflags) -I../../include -fPIC
+CXX := clang++
+CXXFLAGS := $(shell llvm-config --cxxflags) -fPIC
 
 OPT_OBJs := $(subst .cpp,.o,$(wildcard ./src/*.cpp))
 TEST_SRCs := $(basename $(notdir $(wildcard ./tests/*.c)))
 TEST_RAW_LLs := $(subst .c,.ll,$(wildcard ./tests/*.c))
 TEST_OPT_LLs := $(addprefix ./tests/,$(addsuffix -opt.ll,$(TEST_SRCs)))
 
-LLVM_CODE_INCLUDE_PATH := /home/bronya/developer/llvm-12.0.1/llvm/include
-LLVM_HOME_INCLUDE_PATH := /home/bronya/developer/llvm-12.0.1/build/include
+LLVM_PATH = $(shell llvm-config --includedir)
 
-all: $(TEST_RAW_LLs)
+out: link
+	clang ./tests/linked.bc -o ./out
 
-# ./tests/%-opt.ll: ./tests/%-opt.bc
-# 	llvm-dis $< -o=$@
+link: all
+	clang -emit-llvm -S ./src/encrypt.c -o ./tests/encrypt.ll
+	llvm-link ./tests/encrypt.ll $(TEST_OPT_LLs) -o ./tests/linked.bc
+	llvm-dis ./tests/linked.bc -o ./tests/linked.ll
+
+all: $(TEST_RAW_LLs) $(TEST_OPT_LLs)
+
+./tests/%-opt.ll: ./tests/%-opt.bc
+	llvm-dis $< -o=$@
 
 ./tests/%.ll: ./tests/%-m2r.bc
 	llvm-dis $< -o=$@
 
-# ./tests/%-opt.bc: ./tests/%-m2r.bc $(OPTIMIZER)
-# 	env LD_LIBRARY_PATH=. opt -load-pass-plugin $(OPTIMIZER) -passes=obfuscator $< -o $@
+./tests/%-opt.bc: ./tests/%-m2r.bc $(OPTIMIZER)
+	opt -enable-new-pm=1 -load-pass-plugin ./$(OPTIMIZER) -passes=obfuscator $< -o $@
 
 ./tests/%-m2r.bc: ./tests/%.bc
 	opt -mem2reg $< -o $@
 
 ./tests/%.bc: ./tests/%.c
-	clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c -I$(LLVM_CODE_INCLUDE_PATH) -I$(LLVM_HOME_INCLUDE_PATH) $< -o $@
+	clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c $< -o $@
 
 $(OPTIMIZER): $(OPT_OBJs)
-	clang++ -dylib -fPIC -shared -I$(LLVM_CODE_INCLUDE_PATH) -I$(LLVM_HOME_INCLUDE_PATH) $^ -o $@
+	$(CXX) -dylib -fPIC -shared $^ -o $@
 
 .PHONY: clean
 
