@@ -3,12 +3,12 @@ build/
 .vscode/
 .cache/
 
-./compile_commands.json
+/compile_commands.json
 
-/*.c
+/test.c
+/test.ll
 /.gdb_history
 
-*.ll
 *.txt
 
 
