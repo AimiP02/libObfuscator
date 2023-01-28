@@ -10,6 +10,7 @@ build/
 /.gdb_history
 
 *.txt
+!CMakeLists.txt
 
 
 # Prerequisites
