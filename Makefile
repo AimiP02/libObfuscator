@@ -23,14 +23,11 @@ all: $(TEST_RAW_LLs) $(TEST_OPT_LLs)
 ./tests/%-opt.ll: ./tests/%-opt.bc
 	llvm-dis $< -o=$@
 
-./tests/%.ll: ./tests/%-m2r.bc
+./tests/%.ll: ./tests/%.bc
 	llvm-dis $< -o=$@
 
-./tests/%-opt.bc: ./tests/%-m2r.bc $(OPTIMIZER)
+./tests/%-opt.bc: ./tests/%.bc $(OPTIMIZER)
 	opt -enable-new-pm=1 -load-pass-plugin ./$(OPTIMIZER) -passes=obfuscator $< -o $@
-
-./tests/%-m2r.bc: ./tests/%.bc
-	opt -mem2reg $< -o $@
 
 ./tests/%.bc: ./tests/%.c
 	clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c $< -o $@

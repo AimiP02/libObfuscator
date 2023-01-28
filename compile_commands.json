@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/home/bronya/work/libObfuscator/build",
+  "command": "/usr/sbin/c++ -DlibObfuscator_EXPORTS -I/home/bronya/developer/llvm-12.0.1/llvm/include -I/home/bronya/developer/llvm-12.0.1/build/include -fPIC   -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -o CMakeFiles/libObfuscator.dir/src/obfuscator.cpp.o -c /home/bronya/work/libObfuscator/src/obfuscator.cpp",
+  "file": "/home/bronya/work/libObfuscator/src/obfuscator.cpp"
+}
+]

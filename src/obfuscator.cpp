@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -43,7 +44,10 @@ public:
   StrObfuscator() {}
   ~StrObfuscator() {}
 
-  void ObfuscateString(Module &M, Instruction *Inst, Value *Usr,
+  // 加密字符串策略是这样的：对每个User所在的Function的EntryBlock上Alloc一个与字符串等长
+  // 的Buffer，然后插入__decrypt函数，将字符串解密到Buffer中，然后将Function内部所有的
+  // 字符串引用替换为Buffer的引用
+  void ObfuscateString(Module &M, Function *Func, Value *Usr,
                        GlobalVariable *GVar) {
     ConstantDataArray *GVarArr =
         dyn_cast<ConstantDataArray>(GVar->getInitializer());
@@ -63,23 +67,49 @@ public:
         GVarArr->getContext(), StringRef(Origin_Str), false);
     GVarArr->replaceAllUsesWith(NewConstStr);
 
-    IRBuilder<> builder(Inst);
-    Type *Int8PtrTy = builder.getInt8PtrTy();
+    // 获取Function的EntryBlock
+    BasicBlock *EntryBlock = &Func->getEntryBlock();
+    // 在EntryBlock上插入Alloc指令，分配一个与字符串等长的Buffer数组变量,align=16
+    IRBuilder<> Builder(EntryBlock, EntryBlock->getFirstInsertionPt());
+    Type *Int8Ty = Builder.getInt8Ty();
+    Type *Int8PtrTy = Builder.getInt8PtrTy();
+    // align=16
+    Value *AllocInst =
+        Builder.CreateAlloca(ArrayType::get(Int8Ty, Origin_Str.length()),
+                             nullptr, GVar->getName() + "_buffer");
+    // 将AllocInst转换为Int8PtrTy类型
+    AllocInst = Builder.CreateBitCast(AllocInst, Int8PtrTy,
+                                      AllocInst->getName() + "pointer");
+    // 将Function内部所有的字符串引用替换为Buffer的引用
+    Usr->replaceAllUsesWith(AllocInst);
+    // 在EntryBlock上插入__decrypt函数，将字符串解密到Buffer中，调用@llvm.memcpy
     SmallVector<Type *, 1> FuncArgs = {Int8PtrTy};
     SmallVector<Value *, 1> CallArgs = {Usr};
     FunctionType *FuncType = FunctionType::get(Int8PtrTy, FuncArgs, false);
-
     Value *DecryptFunc =
         M.getOrInsertFunction("__decrypt", FuncType).getCallee();
-    CallInst *DecryptInst = builder.CreateCall(FuncType, DecryptFunc, CallArgs);
 
-    Value *EncryptFunc =
-        M.getOrInsertFunction("__encrypt", FuncType).getCallee();
-    CallInst *EncryptInst = CallInst::Create(FuncType, EncryptFunc, CallArgs);
-
-    // DecryptInst->insertBefore(Inst);
-    EncryptInst->insertAfter(Inst);
-    outs() << "IR:" << *Inst << " has been modified\n";
+    CallInst *DecryptCall = Builder.CreateCall(FuncType, DecryptFunc, CallArgs);
+    // 在EntryBlock上插入@llvm.memcpy函数，将字符串解密到Buffer中，返回值为void
+    FunctionType *MemFuncType = FunctionType::get(Builder.getVoidTy(), false);
+    Value *MemcpyFunc =
+        M.getOrInsertFunction("llvm.memcpy.p0i8.p0i8.i64", Builder.getVoidTy(),
+                              Int8PtrTy, Int8PtrTy, Builder.getInt64Ty(),
+                              Builder.getInt1Ty())
+            .getCallee();
+    SmallVector<Value *, 4> MemcpyArgs = {AllocInst, DecryptCall,
+                                          Builder.getInt64(Origin_Str.length()),
+                                          Builder.getInt1(0)};
+    CallInst *MemcpyCall =
+        Builder.CreateCall(MemFuncType, MemcpyFunc, MemcpyArgs);
+    // // 获取Function的ExitBlock
+    // BasicBlock *ExitBlock = &Func->getBasicBlockList().back();
+    // // 在ExitBlock的尾部最后一个指令前插入__encrypt函数，将原字符串加密
+    // Builder.SetInsertPoint(ExitBlock, --ExitBlock->end());
+    // Value *EncryptFunc =
+    //     M.getOrInsertFunction("__encrypt", FuncType).getCallee();
+    // CallInst *EncryptCall = Builder.CreateCall(FuncType, EncryptFunc,
+    // CallArgs);
   }
 
   virtual PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
@@ -90,7 +120,7 @@ public:
       if (GVar == nullptr) {
         continue;
       }
-      std::vector<std::pair<Instruction *, User *>> Target;
+      std::set<std::pair<Function *, User *>> Target;
       bool hasExceptCallInst = false;
       // 获取使用GVar的User
       for (User *Usr : GVar->users()) {
@@ -100,26 +130,26 @@ public:
         if (Inst == nullptr) {
           for (User *DirectUsr : Usr->users()) {
             Inst = dyn_cast<Instruction>(DirectUsr);
-            outs() << "DirectUsr Instruction: " << *Inst << "\n";
-            // 如果不是一个Call指令，那么是不需要修改的，我们只修改函数形参引用的字符串
+            outs() << "DirectUsr: " << *Inst << "\n";
             if (Inst == nullptr) {
               continue;
             }
+            // 如果不是一个Call指令，那么是不需要修改的，我们只修改函数形参引用的字符串
             if (!isa<CallInst>(Inst)) {
               hasExceptCallInst = true;
               Target.clear();
             } else {
-              Target.emplace_back(std::pair<Instruction *, User *>(Inst, Usr));
+              Target.emplace(
+                  std::pair<Function *, User *>(Inst->getFunction(), Usr));
             }
           }
         }
       }
-      // 对每个字符串进行加密
-      if (hasExceptCallInst == false && Target.size() == 1) {
+      if (hasExceptCallInst == false) {
         for (auto &T : Target) {
+          ObfuscateString(M, T.first, T.second, GVar);
           outs() << "Parameter Instruction: " << *T.first << "\n";
           outs() << "Parameter User: " << *T.second << "\n";
-          ObfuscateString(M, T.first, T.second, GVar);
         }
         GVar->setConstant(false);
       }
