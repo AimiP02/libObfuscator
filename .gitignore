@@ -27,6 +27,8 @@ build/
 *.pch
 
 # Compiled Dynamic libraries
+*.ll
+*.bc
 *.so
 *.dylib
 *.dll
