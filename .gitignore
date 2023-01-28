@@ -5,8 +5,9 @@ build/
 
 ./compile_commands.json
 
-./*.so
-./*.o
-./*.c
-./*.ll
-./*.txt
+*.so
+*.o
+*.c
+*.ll
+*.txt
+.gdb_history
