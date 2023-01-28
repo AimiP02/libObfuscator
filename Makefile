@@ -38,4 +38,5 @@ $(OPTIMIZER): $(OPT_OBJs)
 .PHONY: clean
 
 clean:
-	rm $(TEST_OPT_LLs) $(TEST_RAW_LLs) $(OPT_OBJs) $(OPTIMIZER)
+	$(RM) tests/linked.bc tests/linked.ll tests/encrypt.ll
+	$(RM) $(TEST_OPT_LLs) $(TEST_RAW_LLs) $(OPT_OBJs) $(OPTIMIZER)

@@ -25,6 +25,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -74,12 +75,12 @@ public:
     Type *Int8Ty = Builder.getInt8Ty();
     Type *Int8PtrTy = Builder.getInt8PtrTy();
     // align=16
-    Value *AllocInst =
+    AllocaInst *AllocInst =
         Builder.CreateAlloca(ArrayType::get(Int8Ty, Origin_Str.length()),
                              nullptr, GVar->getName() + "_buffer");
+    AllocInst->setAlignment(Align(16));
     // 将AllocInst转换为Int8PtrTy类型
-    AllocInst = Builder.CreateBitCast(AllocInst, Int8PtrTy,
-                                      AllocInst->getName() + "pointer");
+    // AllocInst = Builder.CreateBitCast(AllocInst, Int8PtrTy);
     // 将Function内部所有的字符串引用替换为Buffer的引用
     Usr->replaceAllUsesWith(AllocInst);
     // 在EntryBlock上插入__decrypt函数，将字符串解密到Buffer中，调用@llvm.memcpy

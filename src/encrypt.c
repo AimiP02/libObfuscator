@@ -1,5 +1,4 @@
 char *__decrypt(char *encStr) {
-  // 将原字符串保存到一个新的字符串中
   char *curr = encStr;
   while (*curr) {
     *curr ^= 'a';
