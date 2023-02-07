@@ -10,14 +10,6 @@ TEST_OPT_LLs := $(addprefix ./tests/,$(addsuffix -opt.ll,$(TEST_SRCs)))
 
 LLVM_PATH = $(shell llvm-config --includedir)
 
-out: link
-	clang ./tests/linked.bc -o ./out
-
-link: all
-	clang -emit-llvm -S ./src/encrypt.c -o ./tests/encrypt.ll
-	llvm-link ./tests/encrypt.ll $(TEST_OPT_LLs) -o ./tests/linked.bc
-	llvm-dis ./tests/linked.bc -o ./tests/linked.ll
-
 all: $(TEST_RAW_LLs) $(TEST_OPT_LLs)
 
 ./tests/%-opt.ll: ./tests/%-opt.bc
