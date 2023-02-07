@@ -1,5 +1,7 @@
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -94,7 +96,50 @@ void GVObfuscator::InsertIntDecryption(Module &M, EncryptedGV encGV) {
   appendToGlobalCtors(M, func, 0);
 }
 
-void GVObfuscator::InsertArrayDecryption(Module &M, EncryptedGV encGV) {}
+void GVObfuscator::InsertArrayDecryption(Module &M, EncryptedGV encGV) {
+  std::vector<Type *> funcArgs;
+  FunctionType *funcType =
+      FunctionType::get(Type::getVoidTy(M.getContext()), funcArgs, false);
+  std::string funcName = GenHashedName(encGV.GV);
+  FunctionCallee callee = M.getOrInsertFunction(funcName, funcType);
+  Function *func = cast<Function>(callee.getCallee());
+
+  BasicBlock *entry = BasicBlock::Create(*ctx, "entry", func);
+  BasicBlock *forCond = BasicBlock::Create(*ctx, "for.cond", func);
+  BasicBlock *forBody = BasicBlock::Create(*ctx, "for.body", func);
+  BasicBlock *forInc = BasicBlock::Create(*ctx, "for.inc", func);
+  BasicBlock *forEnd = BasicBlock::Create(*ctx, "for.inc", func);
+
+  IRBuilder<> builder(*ctx);
+  Type *Int32Ty = builder.getInt32Ty();
+  builder.SetInsertPoint(entry);
+  AllocaInst *indexPtr =
+      builder.CreateAlloca(Int32Ty, ConstantInt::get(Int32Ty, 1, false));
+  builder.CreateStore(ConstantInt::get(Int32Ty, 0), indexPtr);
+  builder.CreateBr(forCond);
+  builder.SetInsertPoint(forCond);
+  LoadInst *index = builder.CreateLoad(Int32Ty, indexPtr);
+  ICmpInst *cond = cast<ICmpInst>(
+      builder.CreateICmpSLT(index, ConstantInt::get(Int32Ty, encGV.len)));
+  builder.CreateCondBr(cond, forBody, forEnd);
+  builder.SetInsertPoint(forBody);
+  Value *indexList[2] = {ConstantInt::get(Int32Ty, 0), index};
+  Value *ele = builder.CreateGEP(encGV.GV, ArrayRef<Value *>(indexList, 2));
+  ArrayType *arrTy = cast<ArrayType>(encGV.GV->getValueType());
+  Type *eleTy = arrTy->getElementType();
+  Value *encEle = builder.CreateXor(builder.CreateLoad(ele),
+                                    ConstantInt::get(eleTy, encGV.key));
+  builder.CreateStore(encEle, ele);
+  builder.CreateBr(forInc);
+  builder.SetInsertPoint(forInc);
+  builder.CreateStore(builder.CreateAdd(index, ConstantInt::get(Int32Ty, 1)),
+                      indexPtr);
+  builder.CreateBr(forCond);
+
+  builder.SetInsertPoint(forEnd);
+  builder.CreateRetVoid();
+  appendToGlobalCtors(M, func, 0);
+}
 
 PreservedAnalyses GVObfuscator::run(Module &M, ModuleAnalysisManager &MAM) {
   outs() << "Pass start...\n";
@@ -121,6 +166,7 @@ PreservedAnalyses GVObfuscator::run(Module &M, ModuleAnalysisManager &MAM) {
         Constant *initializer = GV->getInitializer();
         ConstantInt *intData = dyn_cast<ConstantInt>(initializer);
         ConstantDataArray *arrayData = dyn_cast<ConstantDataArray>(initializer);
+        // 处理数组
         if (arrayData) {
           // 获取数组的长度和数组元素的大小
           outs() << "Get global arraydata\n";
@@ -143,7 +189,9 @@ PreservedAnalyses GVObfuscator::run(Module &M, ModuleAnalysisManager &MAM) {
                                         arrayData->getElementType()));
           GV->setConstant(false);
           InsertArrayDecryption(M, {GV, key, eleNum});
-        } else if (intData) {
+        }
+        // 处理整数
+        else if (intData) {
           uint64_t key = cryptoutils->get_uint64_t();
           ConstantInt *enc = ConstantInt::get(intData->getType(),
                                               key ^ intData->getZExtValue());
