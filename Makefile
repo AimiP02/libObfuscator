@@ -19,7 +19,7 @@ all: $(TEST_RAW_LLs) $(TEST_OPT_LLs)
 	llvm-dis $< -o=$@
 
 ./tests/%-opt.bc: ./tests/%.bc $(OPTIMIZER)
-	opt -enable-new-pm=1 -load-pass-plugin ./$(OPTIMIZER) -passes=obfuscator $< -o $@
+	opt -enable-new-pm=1 -load-pass-plugin ./$(OPTIMIZER) -passes=gvobfus $< -o $@
 
 ./tests/%.bc: ./tests/%.c
 	clang -O0 -Xclang -disable-O0-optnone -emit-llvm -c $< -o $@
