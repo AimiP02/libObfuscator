@@ -1,7 +1,7 @@
 OPTIMIZER := obfuscator.so
 
 CXX := clang++
-CXXFLAGS := $(shell llvm-config --cxxflags) -fPIC -I/home/bronya/work/libObfuscator/include
+CXXFLAGS := $(shell llvm-config --cxxflags) -fPIC
 
 OPT_OBJs := $(subst .cpp,.o,$(wildcard ./src/*.cpp))
 TEST_SRCs := $(basename $(notdir $(wildcard ./tests/*.c)))
