@@ -114,7 +114,7 @@ void GVObfuscator::InsertArrayDecryption(Module &M, EncryptedGV encGV) {
   Type *Int32Ty = builder.getInt32Ty();
   builder.SetInsertPoint(entry);
   AllocaInst *indexPtr =
-      builder.CreateAlloca(Int32Ty, ConstantInt::get(Int32Ty, 1, false));
+      builder.CreateAlloca(Int32Ty, ConstantInt::get(Int32Ty, 1, false), "i");
   builder.CreateStore(ConstantInt::get(Int32Ty, 0), indexPtr);
   builder.CreateBr(forCond);
   builder.SetInsertPoint(forCond);

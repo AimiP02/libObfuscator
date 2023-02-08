@@ -1,5 +1,8 @@
 #include <stdio.h>
 
+int a = 10;
+int b[3] = {1, 2, 3};
+
 void func(const char *s) {
   puts("!!!The testing string!!!");
   puts(s);
